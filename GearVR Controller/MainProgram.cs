@@ -1,16 +1,18 @@
 ﻿using System;
+using System.Data;
+using System.Diagnostics;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Timers;
+
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Enumeration;
 using Windows.Security.Cryptography;
 using Windows.Storage.Streams;
-using System.Diagnostics;
-using System.Timers;
-
-
 
 namespace GearVR_Controller
 {
@@ -415,6 +417,7 @@ namespace GearVR_Controller
         private static GattCharacteristic write_characteristic = null;
         private static GattCharacteristic notify_characteristic = null;
         private static BluetoothLEDevice device = null;
+        private DeviceInformationCollection connected;
 
         [DllImport("user32.dll")]
         static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
@@ -609,6 +612,30 @@ namespace GearVR_Controller
                     break;
             }
         }
+
+
+        async public Task<string> FindGearVRController()
+        {
+            DeviceInformationCollection collection = await DeviceInformation.FindAllAsync();
+
+            var deviceinfo = collection.Where(c => c.Name.Contains("Gear VR Controller")).FirstOrDefault();
+
+            if (deviceinfo != null)
+            {
+                string uid = deviceinfo.Properties["System.Devices.DeviceInstanceId"].ToString();
+
+                var match = Regex.Match(uid, @"REV&\d{4}_([a-f A-F 0-9]+)", RegexOptions.IgnoreCase);
+
+                if (match.Success)
+                {
+                    return match.Groups[1].Value;
+                }
+            }
+                
+
+            return null;
+        }
+
         async public void Pair_Connect() // https://stackoverflow.com/questions/35461817/uwp-bluetoothdevice-frombluetoothaddressasync-throws-0x80070002-INFO-on-no
         {
             if (device != null)
@@ -616,6 +643,13 @@ namespace GearVR_Controller
                 Disconnect();
                 await Task.Delay(200);
             }
+
+            var mac = await FindGearVRController();
+            if (mac != null)
+            {
+                User.Default.MACAddressText = mac;
+            }
+
             device = await BluetoothLEDevice.FromBluetoothAddressAsync(MAC802DOT3(User.Default.MACAddressText));
             DeviceInformation infDev = device.DeviceInformation; //We need this aux object to perform pairing
             DevicePairingKinds ceremoniesSelected = DevicePairingKinds.ConfirmOnly /*| Windows.Devices.Enumeration.DevicePairingKinds.ProvidePin*/; //Only confirm pairing, we'll provide PIN from app
